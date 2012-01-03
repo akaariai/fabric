@@ -6,6 +6,9 @@ or performing indenting on multiline output.
 import sys
 import textwrap
 
+class AbortedException(Exception):
+    pass
+
 def abort(msg):
     """
     Abort execution, print ``msg`` to stderr and exit with error status (1.)
@@ -14,15 +17,20 @@ def abort(msg):
     `SystemExit`_. Therefore, it's possible to detect and recover from inner
     calls to `abort` by using ``except SystemExit`` or similar.
 
+    If except-on-abort is set to True, this will raise AbortedException intead of
+    using `sys.exit`_.
+
     .. _sys.exit: http://docs.python.org/library/sys.html#sys.exit
     .. _SystemExit: http://docs.python.org/library/exceptions.html#exceptions.SystemExit
     """
-    from fabric.state import output
+    from fabric.state import output, env
     if output.aborts:
         print >> sys.stderr, "\nFatal error: " + str(msg)
         print >> sys.stderr, "\nAborting."
-    sys.exit(1)
-
+    if env['except_on_abort']:
+        raise AbortedException(str(msg))
+    else:
+        sys.exit(1)
 
 def warn(msg):
     """

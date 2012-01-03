@@ -7,7 +7,7 @@ from functools import wraps
 from Crypto import Random
 
 from fabric import tasks
-from .context_managers import settings
+from .context_managers import settings, email_on_abort
 
 
 def task(*args, **kwargs):
@@ -208,6 +208,15 @@ def with_settings(**kw_settings):
         @wraps(func)
         def inner(*args, **kwargs):
             with settings(**kw_settings):
+                return func(*args, **kwargs)
+        return inner
+    return outer
+
+def with_email_on_abort(*in_args, **in_kwargs):
+    def outer(func):
+        @wraps(func)
+        def inner(*args, **kwargs):
+            with email_on_abort(*in_args, **in_kwargs):
                 return func(*args, **kwargs)
         return inner
     return outer

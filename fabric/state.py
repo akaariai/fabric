@@ -265,6 +265,14 @@ env_options = [
         default=False,
         help="Print stdout/stderr line-by-line instead of byte-by-byte"
     ),
+
+    # Instead of calling sys.exit() on abort conditions, raise an exception.
+    make_option('--except-on-abort',
+        dest='except_on_abort',
+        action='store_true',
+        default=False,
+        help="Raise fabric.utils.AbortedException instead of calling sys.exit when any abort condition is hit"
+   ),
 ]
 
 

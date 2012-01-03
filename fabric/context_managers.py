@@ -8,9 +8,13 @@ Context managers for use with the ``with`` statement.
 """
 
 from contextlib import contextmanager, nested
+import smtplib
+from email.mime.text import MIMEText
 import sys
+import traceback
 
 from fabric.state import env, output, win32
+from fabric.utils import AbortedException
 
 if not win32:
     import termios
@@ -334,3 +338,33 @@ def char_buffered(pipe):
             yield
         finally:
             termios.tcsetattr(pipe, termios.TCSADRAIN, old_settings)
+
+def _send_error_email(exception, smtp_host, from_addr, to_addr, subject_template, body_template):
+    import smtplib
+    from email.mime.text import MIMEText
+    from fabric.state import env
+    import traceback
+    import sys
+    error_msg = str(exception)
+    traceback_body = ''.join(traceback.format_tb(sys.exc_info()[2]))
+    context = {'error_msg': error_msg, 'traceback': traceback_body}
+    context.update(env)
+
+    msg = MIMEText(body_template % context)
+    msg['Subject'] = subject_template % context
+    msg['From'] = from_addr
+    msg['To'] = to_addr
+    s = smtplib.SMTP(smtp_host)
+    s.sendmail(from_addr, [to_addr], msg.as_string())
+    s.quit()
+
+@contextmanager
+def email_on_abort(smtp_host, from_addr, to_addr,
+                   subject_template='[FABRIC ERROR] %(command)s was aborted on host %(host)s',
+                   body_template='The error was:\n %(error_msg)s\n\nThe traceback was:\n%(traceback)s'):
+    with settings(except_on_abort=True):
+         try:
+             yield
+         except AbortedException, e:
+             _send_error_email(e, smtp_host, from_addr, to_addr, subject_template, body_template)
+             sys.exit(1)
