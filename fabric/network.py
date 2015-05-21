@@ -32,7 +32,8 @@ Please make sure all dependencies are installed and importable.
     sys.exit(1)
 
 
-ipv6_regex = re.compile('^\[?(?P<host>[0-9A-Fa-f:]+)\]?(:(?P<port>\d+))?$')
+ipv6_regex = re.compile(
+    '^\[?(?P<host>[0-9A-Fa-f:]+(?:%[a-z]+\d+)?)\]?(:(?P<port>\d+))?$')
 
 
 def direct_tcpip(client, host, port):
@@ -95,7 +96,7 @@ def get_gateway(host, port, cache, replace=False):
         # within that method.)
         sock = direct_tcpip(dict.__getitem__(cache, gateway), host, port)
     elif proxy_command:
-        sock = ssh.proxycommand(proxy_command)
+        sock = ssh.ProxyCommand(proxy_command)
     return sock
 
 
@@ -137,9 +138,16 @@ class HostConnectionCache(dict):
         """
         Force a new connection to ``key`` host string.
         """
+        from fabric.state import env
+        
         user, host, port = normalize(key)
         key = normalize_to_string(key)
-        self[key] = connect(user, host, port, cache=self)
+        seek_gateway = True
+        # break the loop when the host is gateway itself
+        if env.gateway:
+            seek_gateway = normalize_to_string(env.gateway) != key
+        self[key] = connect(
+            user, host, port, cache=self, seek_gateway=seek_gateway)
 
     def __getitem__(self, key):
         """
@@ -526,6 +534,8 @@ def connect(user, host, port, cache, seek_gateway=True):
             # Update env.password, env.passwords if empty
             set_password(user, host, port, password)
         # Ctrl-D / Ctrl-C for exit
+        # TODO: this may no longer actually serve its original purpose and may
+        # also hide TypeErrors from paramiko. Double check in v2.
         except (EOFError, TypeError):
             # Print a newline (in case user was sitting at prompt)
             print('')

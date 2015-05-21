@@ -8,8 +8,11 @@ items, though within Fabric itself only ``Process`` objects are used/supported.
 from __future__ import with_statement
 import time
 import six
-if six.PY3: import queue as Queue
-else: import Queue
+if six.PY3:
+    import queue as Queue
+else:
+    import Queue
+from multiprocessing import Process
 
 from fabric.state import env
 from fabric.network import ssh
@@ -177,7 +180,8 @@ class JobQueue(object):
 
         # Attach exit codes now that we're all done & have joined all jobs
         for job in self._completed:
-            results[job.name]['exit_code'] = job.exitcode
+            if isinstance(job, Process):
+                results[job.name]['exit_code'] = job.exitcode
 
         return results
 
@@ -215,7 +219,8 @@ def try_using(parallel_type):
         from threading import Thread as Bucket
 
     # Make a job_queue with a bubble of len 5, and have it print verbosely
-    jobs = JobQueue(5)
+    queue = Queue.Queue()
+    jobs = JobQueue(5, queue)
     jobs._debug = True
 
     # Add 20 procs onto the stack

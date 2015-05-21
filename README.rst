@@ -1,7 +1,4 @@
-.. image:: https://secure.travis-ci.org/fabric/fabric.png?branch=master
-        :target: https://travis-ci.org/fabric/fabric
-
-Fabric is a Python (2.5 or higher) library and command-line tool for
+Fabric is a Python (2.5-2.7) library and command-line tool for
 streamlining the use of SSH for application deployment or systems
 administration tasks.
 
@@ -12,7 +9,9 @@ aborting execution.
  
 Typical use involves creating a Python module containing one or more functions,
 then executing them via the ``fab`` command-line tool. Below is a small but
-complete "fabfile" containing a single task::
+complete "fabfile" containing a single task:
+
+.. code-block:: python
 
     from fabric.api import run
 

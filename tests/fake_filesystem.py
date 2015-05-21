@@ -1,6 +1,11 @@
 import os
 import stat
-from six import string_types, text_type, iteritems, StringIO
+from six import string_types, text_type, iteritems
+import six
+if six.PY3:
+    from six import BytesIO as StringIO
+else:
+    from six import StringIO
 
 from fabric.network import ssh
 
@@ -10,13 +15,15 @@ class FakeFile(StringIO):
     def __init__(self, value=None, path=None):
         init = lambda x: StringIO.__init__(self, x)
         if value is None:
-            init("")
+            value = ""
             ftype = 'dir'
             size = 4096
         else:
-            init(value)
             ftype = 'file'
             size = len(value)
+        if six.PY3 and isinstance(value, text_type):
+            value = value.encode('UTF-8')
+        init(value)
         attr = ssh.SFTPAttributes()
         attr.st_mode = {'file': stat.S_IFREG, 'dir': stat.S_IFDIR}[ftype]
         attr.st_size = size
@@ -24,13 +31,13 @@ class FakeFile(StringIO):
         self.attributes = attr
 
     def __str__(self):
-        return self.getvalue()
+        return self.getvalue().decode('UTF-8')
 
     def __unicode__(self):
-        return self.getvalue()
+        return self.getvalue().decode('UTF-8')
 
     def __repr__(self):
-        return self.getvalue()
+        return repr(self.getvalue().decode('UTF-8'))
 
     def write(self, value):
         StringIO.write(self, value)
@@ -45,6 +52,13 @@ class FakeFile(StringIO):
     def __cmp__(self, other):
         me = str(self) if isinstance(other, string_types) else self
         return cmp(me, other)
+
+    def __eq__(self, other):
+        if isinstance(other, string_types):
+            return str(self) == other
+        if hasattr(other, 'getvalue'):
+            return self.getvalue() == other.getvalue()
+        return self.getvalue() == other
 
 
 class FakeFilesystem(dict):

@@ -12,6 +12,10 @@ from fabric.utils import warn
 from fabric.context_managers import settings
 
 from six import string_types
+import six
+
+# TODO: use self.sftp.listdir_iter on Paramiko 1.15+
+
 
 def _format_local(local_path, local_is_path):
     """Format a path for log output"""
@@ -37,7 +41,7 @@ class SFTP(object):
 
     def isdir(self, path):
         try:
-            return stat.S_ISDIR(self.ftp.lstat(path).st_mode)
+            return stat.S_ISDIR(self.ftp.stat(path).st_mode)
         except IOError:
             return False
 
@@ -107,11 +111,13 @@ class SFTP(object):
         from fabric.api import sudo, hide
         if use_sudo:
             with hide('everything'):
-                sudo('mkdir %s' % path)
+                sudo('mkdir "%s"' % path)
         else:
             self.ftp.mkdir(path)
 
-    def get(self, remote_path, local_path, local_is_path, rremote=None):
+    def get(self, remote_path, local_path, use_sudo, local_is_path, rremote=None, temp_dir=""):
+        from fabric.api import sudo, hide
+
         # rremote => relative remote path, so get(/var/log) would result in
         # this function being called with
         # remote_path=/var/log/apache2/access.log and
@@ -124,6 +130,7 @@ class SFTP(object):
             'dirname': os.path.dirname(rremote),
             'path': rremote
         }
+
         if local_is_path:
             # Naive fix to issue #711
             escaped_path = re.sub(r'(%[^()]*\w)', r'%\1', local_path)
@@ -136,6 +143,7 @@ class SFTP(object):
                 os.makedirs(dirpath)
             if os.path.isdir(local_path):
                 local_path = os.path.join(local_path, path_vars['basename'])
+
         if output.running:
             print("[%s] download: %s <- %s" % (
                 env.host_string,
@@ -146,18 +154,47 @@ class SFTP(object):
         if local_is_path and os.path.exists(local_path):
             msg = "Local file %s already exists and is being overwritten."
             warn(msg % local_path)
-        # File-like objects: reset to file seek 0 (to ensure full overwrite)
-        # and then use Paramiko's getfo() directly
-        getter = self.ftp.get
-        if not local_is_path:
-            local_path.seek(0)
-            getter = self.ftp.getfo
-        getter(remote_path, local_path)
+
+        # When using sudo, "bounce" the file through a guaranteed-unique file
+        # path in the default remote CWD (which, typically, the login user will
+        # have write permissions on) in order to sudo(cp) it.
+        if use_sudo:
+            target_path = remote_path
+            hasher = hashlib.sha1()
+            host_string = env.host_string.encode('UTF-8') if six.PY3 else env.host_string
+            hasher.update(host_string)
+            target_path_bytes = target_path.encode('UTF-8') if six.PY3 else target_path
+            hasher.update(target_path_bytes)
+            target_path = posixpath.join(temp_dir, hasher.hexdigest())
+            # Temporarily nuke 'cwd' so sudo() doesn't "cd" its mv command.
+            # (The target path has already been cwd-ified elsewhere.)
+            with settings(hide('everything'), cwd=""):
+                sudo('cp -p "%s" "%s"' % (remote_path, target_path))
+                # The user should always own the copied file.
+                sudo('chown %s "%s"' % (env.user, target_path))
+                # Only root and the user has the right to read the file
+                sudo('chmod %o "%s"' % (0o0400, target_path))
+                remote_path = target_path
+
+        try:
+            # File-like objects: reset to file seek 0 (to ensure full overwrite)
+            # and then use Paramiko's getfo() directly
+            getter = self.ftp.get
+            if not local_is_path:
+                local_path.seek(0)
+                getter = self.ftp.getfo
+            getter(remote_path, local_path)
+        finally:
+            # try to remove the temporary file after the download
+            if use_sudo:
+                with settings(hide('everything'), cwd=""):
+                    sudo('rm -f "%s"' % remote_path)
+
         # Return local_path object for posterity. (If mutated, caller will want
         # to know.)
         return local_path
 
-    def get_dir(self, remote_path, local_path):
+    def get_dir(self, remote_path, local_path, use_sudo, temp_dir):
         # Decide what needs to be stripped from remote paths so they're all
         # relative to the given remote_path
         if os.path.basename(remote_path):
@@ -193,11 +230,12 @@ class SFTP(object):
                     lpath = local_path
                 # Now we can make a call to self.get() with specific file paths
                 # on both ends.
-                result.append(self.get(rpath, lpath, True, rremote))
+                result.append(self.get(rpath, lpath, use_sudo, True, rremote, temp_dir))
         return result
 
     def put(self, local_path, remote_path, use_sudo, mirror_local_mode, mode,
         local_is_path, temp_dir):
+
         from fabric.api import sudo, hide
         pre = self.ftp.getcwd()
         pre = pre if pre else ''
@@ -247,7 +285,10 @@ class SFTP(object):
                 rmode = (rmode & 0o7777)
             if lmode != rmode:
                 if use_sudo:
-                    with hide('everything'):
+                    # Temporarily nuke 'cwd' so sudo() doesn't "cd" its mv
+                    # command. (The target path has already been cwd-ified
+                    # elsewhere.)
+                    with settings(hide('everything'), cwd=""):
                         sudo('chmod %o \"%s\"' % (lmode, remote_path))
                 else:
                     self.ftp.chmod(remote_path, lmode)
