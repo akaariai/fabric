@@ -644,6 +644,8 @@ def needs_host(func):
     @wraps(func)
     def host_prompting_wrapper(*args, **kwargs):
         while not env.get('host_string', False):
+            if PY3:
+                from builtins import input
             try:
                 input = raw_input
             except NameError:
