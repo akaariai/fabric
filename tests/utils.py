@@ -177,6 +177,8 @@ Got:
 
 
 def eq_contents(path, text):
+    if six.PY3 and isinstance(text, six.binary_type):
+        text = text.decode('UTF-8')
     with open(path) as fd:
         eq_(text, fd.read())
 
