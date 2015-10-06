@@ -112,7 +112,8 @@ class OutputLooper(object):
                 if self.printing:
                     printable_bytes = bytelist
                     if six.PY3:
-                        printable_bytes = printable_bytes.decode('utf-8')
+                        printable_bytes = printable_bytes.decode(
+                            'utf-8', errors='replace')
                     # Small state machine to eat \n after \r
                     if printable_bytes[-1] == "\r":
                         seen_cr = True
