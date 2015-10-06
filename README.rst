@@ -34,3 +34,7 @@ In addition to use via the ``fab`` tool, Fabric's components may be imported
 into other Python code, providing a Pythonic interface to the SSH protocol
 suite at a higher level than that provided by e.g. the ``Paramiko`` library
 (which Fabric itself uses.)
+
+This fork implements minimal changes to make fabric work on Python 3.4.
+The fork mostly works, but there is one known failure, output from remote
+machine is sometimes printed as r'output' instead of just output.
