@@ -153,7 +153,7 @@ class OutputLooper(object):
                 # Now we have handled printing, handle interactivity
                 tmp = bytelist
                 if six.PY3:
-                    tmp = tmp.decode('utf-8')
+                    tmp = tmp.decode('utf-8', errors='replace')
                 read_lines = re.split(r"(\r|\n|\r\n)", tmp)
                 for fragment in read_lines:
                     # Store in capture buffer
